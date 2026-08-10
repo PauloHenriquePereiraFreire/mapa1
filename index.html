@@ -42,6 +42,19 @@
             padding: 0;
             margin: 0;
         }
+            #caixa-info 
+        {
+        position: absolute;
+        bottom: 10px;           /* Distância do fundo */
+        left: 10px;             /* Distância da esquerda */
+        z-index: 1000;          /* Garante que fica em cima do mapa */
+        background: white;      /* Cor de fundo */
+        padding: 8px 12px;      /* Espaçamento interno do texto */
+        border-radius: 4px;     /* Bordas arredondadas */
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        box-shadow: 0 0 15px rgba(0,0,0,0.2); /* Sombra para dar destaque */
+        }
         </style>
         <title></title>
     </head>
@@ -54,6 +67,7 @@
                 <div id="popup-content"></div>
             </div>
         </div>
+        <div id="caixa-info">Texto de informações do mapa</div>
         <script src="resources/qgis2web_expressions.js"></script>
 <script src="resources/proj4.js"></script>
         <script>proj4.defs('EPSG:31982','+proj=utm +zone=22 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs');</script>
