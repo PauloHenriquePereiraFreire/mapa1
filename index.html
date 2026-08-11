@@ -68,6 +68,7 @@
             </div>
         </div>
         <div id="caixa-info">Texto de informações do mapa</div>
+        
         <script src="resources/qgis2web_expressions.js"></script>
         <script src="resources/proj4.js"></script>
         <script>proj4.defs('EPSG:31982','+proj=utm +zone=22 +south +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs');</script>
@@ -76,118 +77,117 @@
         <script src="./resources/ol-layerswitcher.js"></script>
         <script src="resources/photon-geocoder-autocomplete.min.js"></script>
         <script src="resources/olms.js"></script>
-        
-        <!-- A camada estática local antiga foi removida daqui para evitar pontos duplicados -->
-        
         <script src="styles/testeIFC_1_style.js"></script>
+        
+        <!-- Mantemos a leitura original das camadas para o Google Maps carregar perfeitamente -->
         <script src="./layers/layers.js" type="text/javascript"></script> 
+        
         <script src="./resources/Autolinker.min.js"></script>
         <script src="./resources/qgis2web.js"></script>        
 
-        <!-- BLOCO DE CONEXÃO DINÂMICA COM O SUPABASE -->
+        <!-- ADICIONAMOS A LIGAÇÃO DINÂMICA APÓS O MAPA ESTAR MONTADO -->
         <script>
-        // 1. Configurações da API do seu Supabase (Modifique apenas a chave abaixo)
-        const SUPABASE_URL = 'https://supabase.co'; 
-        const SUPABASE_KEY = 'COLE_AQUI_A_SUA_CHAVE_ANON_PUBLIC_DO_SUPABASE'; 
+        setTimeout(() => {
+            if (typeof map === 'undefined') return;
 
-        // 2. Cria uma camada de vetores vazia no OpenLayers para receber os pontos da nuvem
-        const fonteSupabase = new ol.source.Vector();
-        const camadaSupabase = new ol.layer.Vector({
-            source: fonteSupabase,
-            style: style_testeIFC_1 // Mantém o visual do ponto/ícone configurado no seu QGIS
-        });
+            // 1. Configurações da API do seu Supabase
+            const SUPABASE_URL = 'https://supabase.co'; 
+            const SUPABASE_KEY = 'COLE_AQUI_A_SUA_CHAVE_ANON_PUBLIC_DO_SUPABASE'; 
 
-        // Adiciona a camada viva ao mapa gerado pelo qgis2web
-        map.addLayer(camadaSupabase);
-
-        // 3. Função para buscar os dados em tempo real no banco do Supabase
-        async function carregarPontosVivos() {
-            try {
-                const resposta = await fetch(`${SUPABASE_URL}/rest/v1/teste?select=*`, {
-                    headers: {
-                        'apikey': SUPABASE_KEY,
-                        'Authorization': `Bearer ${SUPABASE_KEY}`
-                    }
-                });
-                const dados = await resposta.json();
-
-                dados.forEach(linha => {
-                    if (!linha.wkt) return;
-
-                    // Extrai a longitude e latitude do texto POINT(-49.2712 -25.4284)
-                    const coordsTexto = linha.wkt.replace('POINT(', '').replace(')', '').split(' ');
-                    const lng = parseFloat(coordsTexto[0]);
-                    const lat = parseFloat(coordsTexto[1]);
-
-                    // Transforma a coordenada geográfica WGS84 para a projeção de tela do mapa
-                    const coordenadaMapa = ol.proj.fromLonLat([lng, lat]);
-
-                    // Cria o ponto geográfico no OpenLayers
-                    const feicaoPonto = new ol.Feature({
-                        geometry: new ol.geom.Point(coordenadaMapa)
-                    });
-
-                    // Guarda as informações e os links vivos dentro do próprio ponto mapeado
-                    feicaoPonto.setProperties({
-                        'nome': linha.nome,
-                        'ifc': linha.ifc,
-                        'foto_1': linha.foto_1,
-                        'foto_2': linha.foto_2,
-                        'foto_3': linha.foto_3
-                    });
-
-                    // Desenha o ponto na camada do mapa
-                    fonteSupabase.addFeature(feicaoPonto);
-                });
-            } catch (erro) {
-                console.error("Erro ao carregar dados dinâmicos do Supabase:", erro);
-            }
-        }
-
-        // Executa a busca automática assim que o link do mapa é aberto
-        carregarPontosVivos();
-
-        // 4. Gerenciador do Balão de Clique (Popup) para exibir as informações e mídias
-        map.on('singleclick', function (evento) {
-            const feicaoClicada = map.forEachFeatureAtPixel(evento.pixel, function (feature) {
-                return feature;
+            // 2. Cria uma camada de vetores vazia dedicada para o ponto dinâmico
+            const fonteSupabase = new ol.source.Vector();
+            const camadaSupabase = new ol.layer.Vector({
+                source: fonteSupabase,
+                style: typeof style_testeIFC_1 !== 'undefined' ? style_testeIFC_1 : undefined
             });
 
-            const elementoPopup = document.getElementById('popup-content');
-            const containerPopup = document.getElementById('popup');
+            map.addLayer(camadaSupabase);
 
-            // Garante o fechamento do popup anterior
-            if (typeof overlay !== 'undefined') {
-                overlay.setPosition(undefined);
-            }
+            // 3. Função para buscar os dados em tempo real no banco
+            async function carregarPontosVivos() {
+                try {
+                    const resposta = await fetch(`${SUPABASE_URL}/rest/v1/teste?select=*`, {
+                        headers: {
+                            'apikey': SUPABASE_KEY,
+                            'Authorization': `Bearer ${SUPABASE_KEY}`
+                        }
+                    });
+                    const dados = await resposta.json();
 
-            if (feicaoClicada && feicaoClicada.get('ifc')) {
-                const propriedades = feicaoClicada.getProperties();
-                const coordenadaClique = evento.coordinate;
+                    dados.forEach(linha => {
+                        if (!linha.wkt) return;
 
-                // Monta o layout HTML do balão com títulos e links que abrem em novas abas
-                const conteudoHTML = `
-                    <div style="font-family: Arial, sans-serif; padding: 5px; max-width: 250px;">
-                        <h3 style="margin-top: 0; color: #333; font-size: 16px;">${propriedades.nome || 'Ponto de Inspeção'}</h3>
-                        <p style="margin: 8px 0; font-size: 13px;"><b>Arquivo IFC:</b> <br><a href="${propriedades.ifc}" target="_blank" style="color: #0066cc; text-decoration: underline; font-weight: bold;">Baixar do Google Drive</a></p>
-                        <hr style="border: 0; border-top: 1px solid #ddd; margin: 10px 0;">
-                        <p style="margin: 3px 0; font-size: 13px;"><b>Imagens do Local:</b></p>
-                        <ul style="padding-left: 15px; margin: 5px 0; font-size: 13px; line-height: 18px;">
-                            <li><a href="${propriedades.foto_1}" target="_blank" style="color: #0066cc; text-decoration: none;">Ver Foto 1 (GitHub)</a></li>
-                            <li><a href="${propriedades.foto_2}" target="_blank" style="color: #0066cc; text-decoration: none;">Ver Foto 2 (GitHub)</a></li>
-                            <li><a href="${propriedades.foto_3}" target="_blank" style="color: #0066cc; text-decoration: none;">Ver Foto 3 (GitHub)</a></li>
-                        </ul>
-                    </div>
-                `;
+                        // Extrai a longitude e latitude do texto POINT(-49.2712 -25.4284)
+                        const coordsTexto = linha.wkt.replace('POINT(', '').replace(')', '').split(' ');
+                        const lng = parseFloat(coordsTexto[0]);
+                        const lat = parseFloat(coordsTexto[1]);
 
-                elementoPopup.innerHTML = conteudoHTML;
-                
-                // Exibe o popup na posição exata do clique se o objeto overlay do OpenLayers estiver ativo
-                if (typeof overlay !== 'undefined') {
-                    overlay.setPosition(coordenadaClique);
+                        if (isNaN(lng) || isNaN(lat)) return;
+
+                        // Transforma a coordenada WGS84 para a projeção do mapa (Mercator)
+                        const coordenadaMapa = ol.proj.fromLonLat([lng, lat]);
+
+                        // Cria o ponto geográfico no OpenLayers
+                        const feicaoPonto = new ol.Feature({
+                            geometry: new ol.geom.Point(coordenadaMapa)
+                        });
+
+                        // Guarda as informações dinâmicas dentro do próprio ponto
+                        feicaoPonto.setProperties({
+                            'nome': linha.nome,
+                            'ifc': linha.ifc,
+                            'foto_1': linha.foto_1,
+                            'foto_2': linha.foto_2,
+                            'foto_3': linha.foto_3
+                        });
+
+                        fonteSupabase.addFeature(feicaoPonto);
+                    });
+                } catch (erro) {
+                    console.error("Erro ao carregar dados do Supabase:", erro);
                 }
             }
-        });
+
+            carregarPontosVivos();
+
+            // 4. Gerenciador do Balão de Clique corrigido para o OpenLayers
+            map.on('singleclick', function (evento) {
+                const feicaoClicada = map.forEachFeatureAtPixel(evento.pixel, function (feature) {
+                    return feature;
+                });
+
+                const elementoPopup = document.getElementById('popup-content');
+
+                if (feicaoClicada && feicaoClicada.get('ifc')) {
+                    const propriedades = feicaoClicada.getProperties();
+                    const coordenadaClique = evento.coordinate;
+
+                    const conteudoHTML = `
+                        <div style="font-family: Arial, sans-serif; padding: 5px; max-width: 250px;">
+                            <h3 style="margin-top: 0; color: #333; font-size: 16px;">${propriedades.nome || 'Ponto de Inspeção'}</h3>
+                            <p style="margin: 8px 0; font-size: 13px;"><b>Arquivo IFC:</b> <br><a href="${propriedades.ifc}" target="_blank" style="color: #0066cc; text-decoration: underline; font-weight: bold;">Baixar do Google Drive</a></p>
+                            <hr style="border: 0; border-top: 1px solid #ddd; margin: 10px 0;">
+                            <p style="margin: 3px 0; font-size: 13px;"><b>Imagens do Local:</b></p>
+                            <ul style="padding-left: 15px; margin: 5px 0; font-size: 13px; line-height: 18px;">
+                                <li><a href="${propriedades.foto_1}" target="_blank" style="color: #0066cc; text-decoration: none;">Ver Foto 1 (GitHub)</a></li>
+                                <li><a href="${propriedades.foto_2}" target="_blank" style="color: #0066cc; text-decoration: none;">Ver Foto 2 (GitHub)</a></li>
+                                <li><a href="${propriedades.foto_3}" target="_blank" style="color: #0066cc; text-decoration: none;">Ver Foto 3 (GitHub)</a></li>
+                            </ul>
+                        </div>
+                    `;
+
+                    elementoPopup.innerHTML = conteudoHTML;
+                    
+                    if (typeof overlay !== 'undefined') {
+                        overlay.setPosition(coordenadaClique);
+                    }
+                } else {
+                    if (typeof overlay !== 'undefined') {
+                        overlay.setPosition(undefined);
+                    }
+                }
+            });
+        }, 500); // Aguarda o mapa base carregar primeiro antes de inserir os dados
         </script>
     </body>
 </html>
